@@ -3,10 +3,11 @@ package cc.whohow.excel;
 import java.util.Objects;
 
 public class ColumnKey {
-    private String name;
+    private final String name;
     private String description;
 
-    public ColumnKey() {
+    public ColumnKey(String name) {
+        this(name, null);
     }
 
     public ColumnKey(String name, String description) {
@@ -16,10 +17,6 @@ public class ColumnKey {
 
     public String getName() {
         return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     public String getDescription() {
@@ -32,23 +29,26 @@ public class ColumnKey {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         ColumnKey columnKey = (ColumnKey) o;
-        return Objects.equals(name, columnKey.name) &&
-                Objects.equals(description, columnKey.description);
+        return Objects.equals(name, columnKey.name);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, description);
+        return Objects.hashCode(name);
     }
 
     @Override
     public String toString() {
-        return "ColumnKey{" +
-                "name='" + name + '\'' +
-                ", description='" + description + '\'' +
-                '}';
+        if (description == null || description.isEmpty()) {
+            return name;
+        }
+        return name + "(" + description + ")";
     }
 }
