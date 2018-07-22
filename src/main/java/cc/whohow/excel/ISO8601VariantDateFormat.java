@@ -45,11 +45,17 @@ public class ISO8601VariantDateFormat {
         int hour = dateTime.getHour();
         int minute = dateTime.getMinute();
         int second = dateTime.getSecond();
+
         buffer.append(year);
         buffer.append('-');
         format00(buffer, month);
         buffer.append('-');
         format00(buffer, day);
+
+        if (hour == 0 && minute == 0 && second == 0) {
+            return buffer;
+        }
+
         buffer.append(' ');
         format00(buffer, hour);
         buffer.append(':');
