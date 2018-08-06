@@ -5,14 +5,20 @@ import java.util.Objects;
 public class ColumnKey {
     private final String name;
     private String description;
+    private int index;
 
     public ColumnKey(String name) {
-        this(name, null);
+        this(name, name, -1);
     }
 
     public ColumnKey(String name, String description) {
+        this(name, description, -1);
+    }
+
+    public ColumnKey(String name, String description, int index) {
         this.name = name;
         this.description = description;
+        this.index = index;
     }
 
     public String getName() {
@@ -25,6 +31,14 @@ public class ColumnKey {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public int getIndex() {
+        return index;
+    }
+
+    public void setIndex(int index) {
+        this.index = index;
     }
 
     @Override
@@ -46,9 +60,6 @@ public class ColumnKey {
 
     @Override
     public String toString() {
-        if (description == null || description.isEmpty()) {
-            return name;
-        }
-        return name + "(" + description + ")";
+        return name;
     }
 }

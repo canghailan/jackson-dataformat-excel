@@ -5,14 +5,13 @@ import org.apache.poi.ss.SpreadsheetVersion;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class ExcelSchema implements FormatSchema {
     private SpreadsheetVersion version = SpreadsheetVersion.EXCEL2007;
     private int sheetIndex = -1;
     private String sheetName = null;
     private String headerRangeAddress = "1:1";
-    private String dataRangeAddress = "2:";
+    private String bodyRangeAddress = "2:";
     private List<ColumnKey> keys = new ArrayList<>();
 
     @Override
@@ -44,13 +43,20 @@ public class ExcelSchema implements FormatSchema {
         return this;
     }
 
-    public ExcelSchema withData(String data) {
-        this.dataRangeAddress = data;
+    public ExcelSchema withBody(String body) {
+        this.bodyRangeAddress = body;
+        return this;
+    }
+
+    public ExcelSchema withKeys(List<ColumnKey> keys) {
+        this.keys.clear();
+        this.keys.addAll(keys);
         return this;
     }
 
     public ExcelSchema addKey(String name) {
-        return addKey(name, null);
+        this.keys.add(new ColumnKey(name));
+        return this;
     }
 
     public ExcelSchema addKey(String name, String description) {
@@ -58,11 +64,8 @@ public class ExcelSchema implements FormatSchema {
         return this;
     }
 
-    public ExcelSchema addKey(int index, String name, String description) {
-        while (keys.size() <= index) {
-            keys.add(null);
-        }
-        this.keys.set(index, new ColumnKey(name, description));
+    public ExcelSchema addKey(String name, String description, int index) {
+        this.keys.add(new ColumnKey(name, description, index));
         return this;
     }
 
@@ -82,12 +85,11 @@ public class ExcelSchema implements FormatSchema {
         return headerRangeAddress;
     }
 
-    public String getDataRangeAddress() {
-        return dataRangeAddress;
+    public String getBodyRangeAddress() {
+        return bodyRangeAddress;
     }
 
     public List<ColumnKey> getKeys() {
-        keys.removeIf(Objects::isNull);
-        return keys.isEmpty() ? null : keys;
+        return keys;
     }
 }

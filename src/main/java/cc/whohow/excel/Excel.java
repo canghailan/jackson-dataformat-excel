@@ -6,6 +6,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.Date;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,6 +20,7 @@ public class Excel {
     protected final Workbook workbook;
     protected final Sheet sheet;
     protected final FormulaEvaluator formulaEvaluator;
+    protected NumberFormat numberFormat;
 
     public Excel() {
         this(SpreadsheetVersion.EXCEL2007);
@@ -27,18 +30,16 @@ public class Excel {
         this.workbook = sheet.getWorkbook();
         this.sheet = sheet;
         this.formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+        this.numberFormat = new DecimalFormat("#.#");
+        this.numberFormat.setGroupingUsed(false);
     }
 
     public Excel(Workbook workbook) {
-        this.workbook = workbook;
-        this.sheet = workbook.getSheetAt(workbook.getActiveSheetIndex());
-        this.formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+        this(workbook.getSheetAt(workbook.getActiveSheetIndex()));
     }
 
     public Excel(SpreadsheetVersion version) {
-        this.workbook = version == SpreadsheetVersion.EXCEL97 ? new HSSFWorkbook() : new XSSFWorkbook();
-        this.sheet = workbook.createSheet();
-        this.formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+        this(version == SpreadsheetVersion.EXCEL97 ? new HSSFWorkbook() : new XSSFWorkbook());
     }
 
     public CellRangeAddress getSheetRangeAddress() {
@@ -173,7 +174,22 @@ public class Excel {
         return result;
     }
 
-    public String[] getText(Row row, CellRangeAddress range, String defaultValue) {
+    public String[] getRowText(Row row, String defaultValue) {
+        if (row == null || row.getLastCellNum() <= 0) {
+            return new String[0];
+        }
+        String[] result =  new String[row.getLastCellNum()];
+        for (int c = 0; c < row.getLastCellNum(); c++) {
+            result[c] = formatCellValue(getCell(row, c), defaultValue);
+        }
+        return result;
+    }
+
+    public String[] getRowText(CellRangeAddress range, String defaultValue) {
+        return null;
+    }
+
+    public String[] getRowText(Row row, CellRangeAddress range, String defaultValue) {
         CellRangeAddress trimmedRowRangeAddress = getTrimmedRowRangeAddress(row);
         int first = range.getFirstColumn();
         int last = range.getLastColumn();
@@ -192,12 +208,8 @@ public class Excel {
     }
 
     protected Object getCellValue(Cell cell) {
-        return getCellValue(cell, null);
-    }
-
-    protected Object getCellValue(Cell cell, Object defaultValue) {
         if (cell == null) {
-            return defaultValue;
+            return null;
         }
         switch (cell.getCellTypeEnum()) {
             case STRING: {
@@ -210,7 +222,7 @@ public class Excel {
                 return cell.getBooleanCellValue();
             }
             default: {
-                return defaultValue;
+                return null;
             }
         }
     }
@@ -244,7 +256,7 @@ public class Excel {
     }
 
     protected String format(double numericValue) {
-        return Double.toString(numericValue);
+        return numberFormat.format(numericValue);
     }
 
     protected String format(boolean booleanValue) {

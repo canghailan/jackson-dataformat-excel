@@ -20,7 +20,7 @@ public class ExcelGenerator extends GeneratorBase {
     protected Excel excel;
     protected ExcelSchema schema;
     protected CellRangeAddress headerRangeAddress;
-    protected CellRangeAddress dataRangeAddress;
+    protected CellRangeAddress bodyRangeAddress;
     protected List<ColumnKey> keys;
 
     // generator state
@@ -32,7 +32,8 @@ public class ExcelGenerator extends GeneratorBase {
     protected Map<String, Integer> keyIndex = new HashMap<>();
     protected Map<Integer, CellStyle> templateCellStyles = new HashMap<>();
 
-    public ExcelGenerator(int features, int excelFeatures,
+    public ExcelGenerator(int features,
+                          int excelFeatures,
                           ObjectCodec codec,
                           OutputStream stream) {
         super(features, codec);
@@ -58,36 +59,39 @@ public class ExcelGenerator extends GeneratorBase {
         if (template == null) {
             excel = new Excel(schema.getVersion());
         } else {
-            Sheet sheet;
             if (schema.getSheetName() != null) {
-                sheet = template.getSheet(schema.getSheetName());
+                excel = new Excel(template.getSheet(schema.getSheetName()));
+            } else if (0 <= schema.getSheetIndex() && schema.getSheetIndex() < template.getNumberOfSheets()) {
+                excel = new Excel(template.getSheetAt(schema.getSheetIndex()));
+            } else if (0 <= template.getActiveSheetIndex() && template.getActiveSheetIndex() < template.getNumberOfSheets()) {
+                excel = new Excel(template.getSheetAt(template.getActiveSheetIndex()));
             } else {
-                int sheetIndex = schema.getSheetIndex();
-                if (sheetIndex < 0) {
-                    sheetIndex = template.getActiveSheetIndex();
-                }
-                if (sheetIndex < template.getNumberOfSheets()) {
-                    sheet = template.getSheetAt(sheetIndex);
-                } else {
-                    sheet = template.createSheet();
-                }
+                excel = new Excel(template.createSheet());
             }
-            excel = new Excel(sheet);
         }
 
-        keys = schema.getKeys();
-        if (keys == null) {
-            keys = new ArrayList<>();
+        if (schema.getHeaderRangeAddress() != null) {
+            headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
+        }
+        if (schema.getBodyRangeAddress() != null) {
+            bodyRangeAddress = excel.getCellRangeAddress(schema.getBodyRangeAddress());
         }
 
-        headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
-        dataRangeAddress = excel.getCellRangeAddress(schema.getDataRangeAddress());
+        ExcelDetector excelDetector = new ExcelDetector(excel);
+        excelDetector.setKeys(schema.getKeys());
+        excelDetector.setHeaderRangeAddress(headerRangeAddress);
+        excelDetector.setBodyRangeAddress(bodyRangeAddress);
+        excelDetector.detectHeaderRangeAddress();
+        excelDetector.detectBodyRangeAddress();
+        keys = excelDetector.getKeys();
+        headerRangeAddress = excelDetector.getHeaderRangeAddress();
+        bodyRangeAddress = excelDetector.getBodyRangeAddress();
 
         row = null;
         cell = null;
 
-        r = dataRangeAddress.getFirstRow() - 1;
-        c = dataRangeAddress.getFirstColumn() - 1;
+        r = bodyRangeAddress.getFirstRow() - 1;
+        c = bodyRangeAddress.getFirstColumn() - 1;
 
         _writeContext = JsonWriteContext.createRootContext(null);
     }
@@ -96,8 +100,8 @@ public class ExcelGenerator extends GeneratorBase {
     public void writeStartArray() throws IOException {
         initialize();
 
-        r = dataRangeAddress.getFirstRow();
-        c = dataRangeAddress.getFirstColumn() - 1;
+        r = bodyRangeAddress.getFirstRow();
+        c = bodyRangeAddress.getFirstColumn() - 1;
         row = null;
         cell = null;
     }
@@ -106,13 +110,16 @@ public class ExcelGenerator extends GeneratorBase {
     public void writeEndArray() throws IOException {
         writeHeader();
 
-        r = dataRangeAddress.getLastRow();
-        c = dataRangeAddress.getFirstColumn() - 1;
+        c = bodyRangeAddress.getFirstColumn() - 1;
         row = null;
         cell = null;
     }
 
     protected void writeHeader() {
+        if (headerRangeAddress == null) {
+            return;
+        }
+
         r = headerRangeAddress.getLastRow();
         row = excel.createRow(r);
 
@@ -132,7 +139,7 @@ public class ExcelGenerator extends GeneratorBase {
 
     @Override
     public void writeStartObject() throws IOException {
-        c = dataRangeAddress.getFirstColumn();
+        c = bodyRangeAddress.getFirstColumn();
         row = excel.createRow(r);
         cell = null;
     }
@@ -140,7 +147,7 @@ public class ExcelGenerator extends GeneratorBase {
     @Override
     public void writeEndObject() throws IOException {
         r++;
-        c = dataRangeAddress.getFirstColumn() - 1;
+        c = bodyRangeAddress.getFirstColumn() - 1;
         cell = null;
     }
 
@@ -372,7 +379,7 @@ public class ExcelGenerator extends GeneratorBase {
 
     protected int getColumn(String name) {
         int index = getKeyIndexByName(name);
-        return index < 0 ? -1 : dataRangeAddress.getFirstColumn() + index;
+        return index < 0 ? -1 : bodyRangeAddress.getFirstColumn() + index;
     }
 
     protected int getKeyIndexByName(String name) {
@@ -387,7 +394,7 @@ public class ExcelGenerator extends GeneratorBase {
             }
             index++;
         }
-        keys.add(new ColumnKey(name, null));
+        keys.add(new ColumnKey(name, name, index));
         return index;
     }
 
@@ -396,6 +403,6 @@ public class ExcelGenerator extends GeneratorBase {
     }
 
     protected CellStyle getTemplateCellStyle(int column) {
-        return excel.createCell(dataRangeAddress.getFirstRow(), column).getCellStyle();
+        return excel.createCell(bodyRangeAddress.getFirstRow(), column).getCellStyle();
     }
 }

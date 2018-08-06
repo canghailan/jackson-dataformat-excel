@@ -31,7 +31,8 @@ public class ExcelParser extends ParserMinimalBase {
     protected InputStream stream;
     protected Excel excel;
     protected ExcelSchema schema;
-    protected CellRangeAddress dataRangeAddress;
+    protected CellRangeAddress headerRangeAddress;
+    protected CellRangeAddress bodyRangeAddress;
     protected List<ColumnKey> keys;
 
     // parser state
@@ -44,7 +45,8 @@ public class ExcelParser extends ParserMinimalBase {
     protected Deque<JsonToken> tokenBuffer = new ArrayDeque<>(2);
 
     public ExcelParser(IOContext ioContext,
-                       int features, int excelFeatures,
+                       int features,
+                       int excelFeatures,
                        ObjectCodec codec,
                        InputStream stream) {
         super(features);
@@ -79,58 +81,65 @@ public class ExcelParser extends ParserMinimalBase {
             Sheet sheet;
             if (schema.getSheetName() != null) {
                 sheet = workbook.getSheet(schema.getSheetName());
+            } else if (schema.getSheetIndex() >= 0) {
+                sheet = workbook.getSheetAt(schema.getSheetIndex());
             } else {
-                int sheetIndex = schema.getSheetIndex();
-                if (sheetIndex < 0) {
-                    sheetIndex = workbook.getActiveSheetIndex();
-                }
-                sheet = workbook.getSheetAt(sheetIndex);
+                sheet = workbook.getSheetAt(workbook.getActiveSheetIndex());
             }
             excel = new Excel(sheet);
         } catch (InvalidFormatException e) {
             throw new JsonParseException(this, e.getMessage(), e);
         }
 
-        keys = schema.getKeys();
-        if (keys == null) {
-            keys = getKeysFromHeader(excel.getCellRangeAddress(schema.getHeaderRangeAddress()));
+        if (schema.getHeaderRangeAddress() != null) {
+            headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
         }
-        if (keys == null) {
-            keys = new ExcelColumnKeys();
+        if (schema.getBodyRangeAddress() != null) {
+            bodyRangeAddress = excel.getCellRangeAddress(schema.getBodyRangeAddress());
         }
 
-        dataRangeAddress = excel.getCellRangeAddress(schema.getDataRangeAddress());
+        ExcelDetector excelDetector = new ExcelDetector(excel);
+        excelDetector.setKeys(schema.getKeys());
+        excelDetector.setHeaderRangeAddress(headerRangeAddress);
+        excelDetector.setBodyRangeAddress(bodyRangeAddress);
+        excelDetector.detectKeys();
+        excelDetector.detectHeaderRangeAddress();
+        excelDetector.detectBodyRangeAddress();
+        excelDetector.detectKeysIndex();
+        keys = excelDetector.getKeys();
+        headerRangeAddress = excelDetector.getHeaderRangeAddress();
+        bodyRangeAddress = excelDetector.getBodyRangeAddress();
 
         row = null;
         cell = null;
 
-        r = dataRangeAddress.getFirstRow() - 1;
-        c = dataRangeAddress.getFirstColumn() - 1;
+        r = bodyRangeAddress.getFirstRow() - 1;
+        c = bodyRangeAddress.getFirstColumn() - 1;
 
         parsingContext = JsonReadContext.createRootContext(r, c, null);
     }
 
     protected void next() throws IOException {
-        if (dataRangeAddress == null) {
+        if (bodyRangeAddress == null) {
             initialize();
         }
-        if (r < dataRangeAddress.getFirstRow()) {
+        if (r < bodyRangeAddress.getFirstRow()) {
             _handleStart();
             return;
         }
-        if (r > dataRangeAddress.getLastRow()) {
-            if (c < dataRangeAddress.getFirstColumn()) {
+        if (r > bodyRangeAddress.getLastRow()) {
+            if (c < bodyRangeAddress.getFirstColumn()) {
                 _handleEnd();
             } else {
                 _handleEOF();
             }
             return;
         }
-        if (c < dataRangeAddress.getFirstColumn()) {
+        if (c < bodyRangeAddress.getFirstColumn()) {
             _handleRowStart();
             return;
         }
-        if (c > dataRangeAddress.getLastColumn() || row == null || c >= row.getLastCellNum()) {
+        if (c > bodyRangeAddress.getLastColumn() || row == null || c >= row.getLastCellNum()) {
             _handleRowEnd();
             return;
         }
@@ -140,7 +149,7 @@ public class ExcelParser extends ParserMinimalBase {
     protected void _handleRowEnd() {
         tokenBuffer.add(JsonToken.END_OBJECT);
         r++;
-        c = dataRangeAddress.getFirstColumn() - 1;
+        c = bodyRangeAddress.getFirstColumn() - 1;
         cell = null;
     }
 
@@ -148,17 +157,17 @@ public class ExcelParser extends ParserMinimalBase {
         tokenBuffer.add(JsonToken.START_OBJECT);
         row = excel.getRow(r);
 
-        if (excel.isEmptyRow(row, dataRangeAddress)) {
+        if (excel.isEmptyRow(row, bodyRangeAddress)) {
             if (skipEmpty) {
                 tokenBuffer.clear();
                 r++;
-                c = dataRangeAddress.getFirstColumn() - 1;
+                c = bodyRangeAddress.getFirstColumn() - 1;
                 cell = null;
                 return;
             }
         }
 
-        c = dataRangeAddress.getFirstColumn();
+        c = bodyRangeAddress.getFirstColumn();
         if (row != null && c < row.getFirstCellNum()) {
             c = row.getFirstCellNum();
         }
@@ -167,15 +176,15 @@ public class ExcelParser extends ParserMinimalBase {
 
     protected void _handleStart() {
         tokenBuffer.add(JsonToken.START_ARRAY);
-        r = dataRangeAddress.getFirstRow();
-        c = dataRangeAddress.getFirstColumn() - 1;
+        r = bodyRangeAddress.getFirstRow();
+        c = bodyRangeAddress.getFirstColumn() - 1;
         cell = null;
     }
 
     protected void _handleEnd() {
         tokenBuffer.add(JsonToken.END_ARRAY);
-        r = dataRangeAddress.getLastRow() + 1;
-        c = dataRangeAddress.getFirstColumn();
+        r = bodyRangeAddress.getLastRow() + 1;
+        c = bodyRangeAddress.getFirstColumn();
         cell = null;
     }
 
@@ -259,16 +268,16 @@ public class ExcelParser extends ParserMinimalBase {
         }
         switch (token) {
             case START_OBJECT:{
-                return getLocation(r, dataRangeAddress.getFirstColumn() - 1);
+                return getLocation(r, bodyRangeAddress.getFirstColumn() - 1);
             }
             case END_OBJECT: {
-                return getLocation(r - 1, dataRangeAddress.getLastColumn() + 1);
+                return getLocation(r - 1, bodyRangeAddress.getLastColumn() + 1);
             }
             case START_ARRAY:{
-                return getLocation(dataRangeAddress.getFirstRow() - 1, dataRangeAddress.getFirstColumn() - 1);
+                return getLocation(bodyRangeAddress.getFirstRow() - 1, bodyRangeAddress.getFirstColumn() - 1);
             }
             case END_ARRAY: {
-                return getLocation(dataRangeAddress.getLastRow() + 1, dataRangeAddress.getFirstColumn() - 1);
+                return getLocation(bodyRangeAddress.getLastRow() + 1, bodyRangeAddress.getFirstColumn() - 1);
             }
             default: {
                 return getLocation(r, c - 1);
@@ -297,7 +306,7 @@ public class ExcelParser extends ParserMinimalBase {
         switch (_currToken) {
             case START_OBJECT: {
                 parsingContext = parsingContext.createChildObjectContext(
-                        r, dataRangeAddress.getFirstColumn() - 1);
+                        r, bodyRangeAddress.getFirstColumn() - 1);
                 break;
             }
             case END_OBJECT: {
@@ -306,7 +315,7 @@ public class ExcelParser extends ParserMinimalBase {
             }
             case START_ARRAY: {
                 parsingContext = parsingContext.createChildArrayContext(
-                        dataRangeAddress.getFirstRow() - 1, dataRangeAddress.getFirstColumn() - 1);
+                        bodyRangeAddress.getFirstRow() - 1, bodyRangeAddress.getFirstColumn() - 1);
                 break;
             }
             case END_ARRAY: {
@@ -326,8 +335,8 @@ public class ExcelParser extends ParserMinimalBase {
     public JsonParser skipChildren() {
         switch (currentToken()) {
             case START_ARRAY: {
-                r = dataRangeAddress.getLastRow() + 1;
-                c = dataRangeAddress.getFirstColumn() - 1;
+                r = bodyRangeAddress.getLastRow() + 1;
+                c = bodyRangeAddress.getFirstColumn() - 1;
 
                 row = null;
                 cell = null;
@@ -336,7 +345,7 @@ public class ExcelParser extends ParserMinimalBase {
                 return this;
             }
             case START_OBJECT: {
-                c = dataRangeAddress.getLastColumn() + 1;
+                c = bodyRangeAddress.getLastColumn() + 1;
 
                 cell = null;
 
@@ -515,23 +524,6 @@ public class ExcelParser extends ParserMinimalBase {
         if (cell == null) {
             return null;
         }
-        return keys.get(cell.getColumnIndex() - dataRangeAddress.getFirstColumn()).getName();
-    }
-
-
-    protected List<ColumnKey> getKeysFromHeader(CellRangeAddress header) {
-        if (header == null) {
-            return null;
-        }
-        List<ColumnKey> keys = new ArrayList<>();
-        for (int c = header.getFirstColumn(), i = 0; c <= header.getLastColumn(); c++, i++) {
-            Cell cell = excel.getCell(header.getLastRow(), c);
-            String text = excel.formatCellValue(cell, null);
-            if (text == null || text.isEmpty()) {
-                return keys;
-            }
-            keys.add(new ColumnKey(text, text));
-        }
-        return keys.isEmpty() ? null : keys;
+        return keys.get(cell.getColumnIndex() - bodyRangeAddress.getFirstColumn()).getName();
     }
 }

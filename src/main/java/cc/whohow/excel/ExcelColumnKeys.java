@@ -56,6 +56,7 @@ public class ExcelColumnKeys extends AbstractList<ColumnKey> implements Set<Colu
     }
 
     protected ColumnKey newColumnKey(int index) {
-        return new ColumnKey(CellReference.convertNumToColString(index), null);
+        String columnRef = CellReference.convertNumToColString(index);
+        return new ColumnKey(columnRef.toLowerCase(), columnRef, index);
     }
 }
