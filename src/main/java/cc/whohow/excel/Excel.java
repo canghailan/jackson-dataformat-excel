@@ -3,7 +3,10 @@ package cc.whohow.excel;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.SpreadsheetVersion;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.ss.util.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.CellReference;
+import org.apache.poi.ss.util.CellUtil;
+import org.apache.poi.ss.util.SheetUtil;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.text.DateFormat;
@@ -182,6 +185,10 @@ public class Excel {
         return CellUtil.getCell(row, column);
     }
 
+    public String getText(int row, int column) {
+        return formatCellValue(getCell(row, column));
+    }
+
     public String[][] getText(CellRangeAddress range, String defaultValue) {
         int rows = range.getLastRow() - range.getFirstRow() + 1;
         int columns = range.getLastColumn() - range.getFirstColumn() + 1;
@@ -217,14 +224,14 @@ public class Excel {
         if (row == null || row.getLastCellNum() <= 0) {
             return new String[0];
         }
-        String[] result =  new String[row.getLastCellNum()];
+        String[] result = new String[row.getLastCellNum()];
         for (int c = 0; c < row.getLastCellNum(); c++) {
             result[c] = formatCellValue(getCell(row, c), defaultValue);
         }
         return result;
     }
 
-    public Object getCellValue(int row, int column) {
+    public Object getValue(int row, int column) {
         return getCellValue(getCell(row, column));
     }
 

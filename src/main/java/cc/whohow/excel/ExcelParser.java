@@ -7,7 +7,9 @@ import com.fasterxml.jackson.core.json.JsonReadContext;
 import com.fasterxml.jackson.core.json.PackageVersion;
 import com.fasterxml.jackson.core.util.ByteArrayBuilder;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ss.util.CellRangeAddress;
 
 import java.io.IOException;
@@ -15,7 +17,9 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.List;
 import java.util.function.BiFunction;
 
 public class ExcelParser extends ParserMinimalBase {
@@ -39,9 +43,9 @@ public class ExcelParser extends ParserMinimalBase {
     protected List<ColumnKey> keys;
 
     // parser state
-    protected int r;
-    protected int k;
-    protected Cell cell;
+    protected int currentRow;
+    protected int currentKey;
+    protected Cell currentCell;
     protected boolean eof = false;
     protected boolean closed = false;
     protected Deque<JsonToken> tokenBuffer = new ArrayDeque<>(2);
@@ -80,15 +84,13 @@ public class ExcelParser extends ParserMinimalBase {
         }
         try {
             Workbook workbook = WorkbookFactory.create(stream);
-            Sheet sheet;
             if (schema.getSheetName() != null) {
-                sheet = workbook.getSheet(schema.getSheetName());
+                excel = new Excel(workbook.getSheet(schema.getSheetName()));
             } else if (schema.getSheetIndex() >= 0) {
-                sheet = workbook.getSheetAt(schema.getSheetIndex());
+                excel = new Excel(workbook.getSheetAt(schema.getSheetIndex()));
             } else {
-                sheet = workbook.getSheetAt(workbook.getActiveSheetIndex());
+                excel = new Excel(workbook.getSheetAt(workbook.getActiveSheetIndex()));
             }
-            excel = new Excel(sheet);
         } catch (InvalidFormatException e) {
             throw new JsonParseException(this, e.getMessage(), e);
         }
@@ -270,13 +272,13 @@ public class ExcelParser extends ParserMinimalBase {
             return getCurrentLocation();
         }
         switch (token) {
-            case START_OBJECT:{
+            case START_OBJECT: {
                 return getLocation(getCurrentRow(), bodyRangeAddress.getFirstColumn() - 1);
             }
             case END_OBJECT: {
                 return getLocation(getCurrentRow() - 1, bodyRangeAddress.getLastColumn() + 1);
             }
-            case START_ARRAY:{
+            case START_ARRAY: {
                 return getLocation(bodyRangeAddress.getFirstRow() - 1, bodyRangeAddress.getFirstColumn() - 1);
             }
             case END_ARRAY: {
@@ -360,17 +362,17 @@ public class ExcelParser extends ParserMinimalBase {
         setCurrentName(name);
     }
 
+    @Override
+    public String getCurrentName() {
+        return parsingContext.getCurrentName();
+    }
+
     protected void setCurrentName(String name) {
         try {
             parsingContext.setCurrentName(name);
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    @Override
-    public String getCurrentName() {
-        return parsingContext.getCurrentName();
     }
 
     @Override
@@ -406,7 +408,7 @@ public class ExcelParser extends ParserMinimalBase {
     }
 
     @Override
-    public NumberType getNumberType()  {
+    public NumberType getNumberType() {
         JsonToken token = currentToken();
         if (token == JsonToken.VALUE_NUMBER_FLOAT || token == JsonToken.VALUE_NUMBER_INT) {
             return NumberType.DOUBLE;
@@ -494,7 +496,7 @@ public class ExcelParser extends ParserMinimalBase {
                 return getCurrentCell().getStringCellValue();
             }
             case VALUE_NUMBER_FLOAT:
-            case VALUE_NUMBER_INT:{
+            case VALUE_NUMBER_INT: {
                 return excel.format(getCurrentCell().getNumericCellValue());
             }
             case VALUE_TRUE:
@@ -518,22 +520,22 @@ public class ExcelParser extends ParserMinimalBase {
         return defaultValue;
     }
 
-    protected void setCurrentRow(int row) {
-        this.r = row;
-        this.cell = null;
-    }
-
-    protected void setCurrentKey(int key) {
-        this.k = key;
-        this.cell = null;
-    }
-
     protected int getCurrentRow() {
-        return r;
+        return currentRow;
+    }
+
+    protected void setCurrentRow(int row) {
+        this.currentRow = row;
+        this.currentCell = null;
     }
 
     protected int getCurrentKey() {
-        return k;
+        return currentKey;
+    }
+
+    protected void setCurrentKey(int key) {
+        this.currentKey = key;
+        this.currentCell = null;
     }
 
     protected int getCurrentColumn() {
@@ -552,9 +554,9 @@ public class ExcelParser extends ParserMinimalBase {
     }
 
     protected Cell getCurrentCell() {
-        if (cell == null) {
-            cell = excel.getCell(getCurrentRow(), getCurrentColumn());
+        if (currentCell == null) {
+            currentCell = excel.getCell(getCurrentRow(), getCurrentColumn());
         }
-        return cell;
+        return currentCell;
     }
 }

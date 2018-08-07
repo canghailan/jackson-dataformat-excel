@@ -3,7 +3,10 @@ package cc.whohow.excel;
 import org.apache.poi.ss.SpreadsheetVersion;
 import org.apache.poi.ss.util.CellReference;
 
-import java.util.*;
+import java.util.AbstractList;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.Spliterator;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -50,7 +53,7 @@ public class ExcelColumnKeys extends AbstractList<ColumnKey> implements Set<Colu
         }
         int length = cache.length;
         while (length < minLength) {
-            length *=  2;
+            length *= 2;
         }
         cache = Arrays.copyOf(cache, length);
     }

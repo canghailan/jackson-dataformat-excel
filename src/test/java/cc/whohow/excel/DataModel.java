@@ -1,12 +1,10 @@
 package cc.whohow.excel;
 
-import com.fasterxml.jackson.annotation.JsonClassDescription;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 
 import java.util.Date;
 
-@JsonClassDescription
 public class DataModel {
     private Long id;
     @JsonProperty(index = 1)
@@ -168,5 +166,27 @@ public class DataModel {
 
     public void setAuditTime(Date auditTime) {
         this.auditTime = auditTime;
+    }
+
+    @Override
+    public String toString() {
+        return "DataModel{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", province='" + province + '\'' +
+                ", city='" + city + '\'' +
+                ", county='" + county + '\'' +
+                ", leader='" + leader + '\'' +
+                ", phone='" + phone + '\'' +
+                ", contactName='" + contactName + '\'' +
+                ", contactPhone='" + contactPhone + '\'' +
+                ", address='" + address + '\'' +
+                ", weixinAppId='" + weixinAppId + '\'' +
+                ", activation='" + activation + '\'' +
+                ", score='" + score + '\'' +
+                ", activeRate='" + activeRate + '\'' +
+                ", createTime=" + createTime +
+                ", auditTime=" + auditTime +
+                '}';
     }
 }

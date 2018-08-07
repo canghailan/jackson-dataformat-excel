@@ -2,28 +2,29 @@ package cc.whohow.excel;
 
 import java.text.DateFormat;
 import java.text.FieldPosition;
-import java.text.ParseException;
 import java.text.ParsePosition;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ISO8601VariantDateFormat extends DateFormat {
     protected static final Pattern DATE_TIME = Pattern.compile(
-            "(?<year>\\d{4}\\D+)?" +
-                    "(?<month>\\d{1,2}|\\d{2}\\D+)" +
-                    "(?<day>\\d{1,2}|\\d{2})" +
-                    "(?<hour>\\D+\\d{1,2}|\\d{2}\\D+)?" +
-                    "(?<minute>\\d{1,2}|\\d{2}\\D+)?" +
-                    "(?<second>\\d{1,2}|\\d{2}\\D+)?" +
-                    "(?<millisecond>\\d{1,3}|\\d{3})?");
+            "(?<year>(?<Y>\\d{4}))?" +
+                    "(?<month>\\D+(?<M1>\\d{1,2})|(?<M2>\\d{2}))" +
+                    "(?<day>\\D+(?<d1>\\d{1,2})|(?<d2>\\d{2}))" +
+                    "(?<hour>\\D+(?<H1>\\d{1,2})|(?<H2>\\d{2}))?" +
+                    "(?<minute>\\D+(?<m1>\\d{1,2})|(?<m2>\\d{2}))?" +
+                    "(?<second>\\D+(?<s1>\\d{1,2})|(?<s2>\\d{2}))?" +
+                    "(?<millisecond>\\D+(?<S1>\\d{1,3})|(?<S2>\\d{3}))?");
     protected static final Pattern INT = Pattern.compile("\\d+");
 
-    protected final ZoneId zoneId;
+    protected ZoneId zoneId;
 
     public ISO8601VariantDateFormat() {
         this(ZoneId.systemDefault());
@@ -37,14 +38,34 @@ public class ISO8601VariantDateFormat extends DateFormat {
         this.zoneId = zoneId;
     }
 
-    @Override
-    public void setTimeZone(TimeZone zone) {
-        throw new UnsupportedOperationException();
+    private static int parseYear(Matcher matcher, String group) {
+        String value = matcher.group(group);
+        if (value == null) {
+            return LocalDate.now().getYear();
+        }
+        return Integer.parseInt(value);
+    }
+
+    private static int parsePart(Matcher matcher, String group1, String group2, int defaultValue) {
+        String value1 = matcher.group(group1);
+        if (value1 != null) {
+            return Integer.parseInt(value1);
+        }
+        String value2 = matcher.group(group2);
+        if (value2 != null) {
+            return Integer.parseInt(value2);
+        }
+        return defaultValue;
     }
 
     @Override
     public TimeZone getTimeZone() {
         return TimeZone.getTimeZone(zoneId);
+    }
+
+    @Override
+    public void setTimeZone(TimeZone zone) {
+        this.zoneId = zone.toZoneId();
     }
 
     @Override
@@ -100,47 +121,31 @@ public class ISO8601VariantDateFormat extends DateFormat {
     }
 
     @Override
-    public Date parse(String source) throws ParseException {
-        return super.parse(source);
-    }
-
-    @Override
     public Date parse(String source, ParsePosition pos) {
         if (pos.getIndex() != 0) {
             source = source.substring(pos.getIndex());
         }
         Matcher matcher = DATE_TIME.matcher(source);
         if (matcher.find()) {
-            String year = matcher.group("year");
-            String month = matcher.group("month");
-            String day = matcher.group("day");
-            String hour = matcher.group("hour");
-            String minute = matcher.group("minute");
-            String second = matcher.group("second");
-            String millisecond = matcher.group("millisecond");
-            return Date.from(LocalDateTime.of( //
-                    year == null ? LocalDate.now().getYear() : Integer.parseInt(year), // 年，默认当前年
-                    parseInt(month, 1), // 月
-                    parseInt(day, 1), // 日
-                    parseInt(hour, 0), // 时
-                    parseInt(minute, 0), // 分
-                    parseInt(second, 0), // 秒
-                    parseInt(millisecond, 0) * 1_000_000) // 纳秒
-                    .atZone(zoneId).toInstant());
+            Date date = Date.from(ZonedDateTime.of(//
+                    parseYear(matcher, "Y"), // 年，默认当前年
+                    parsePart(matcher, "M1", "M2", 1), // 月
+                    parsePart(matcher, "d1", "d2", 1), // 日
+                    parsePart(matcher, "H1", "H2", 0), // 时
+                    parsePart(matcher, "m1", "m2", 0), // 分
+                    parsePart(matcher, "s1", "s2", 0), // 秒
+                    (int) TimeUnit.MILLISECONDS.toNanos(parsePart(matcher, "S1", "S2", 0)), // 毫秒
+                    zoneId).toInstant());
+            pos.setIndex(pos.getIndex() + matcher.group().length());
+            return date;
         } else {
             pos.setErrorIndex(pos.getIndex());
             return null;
         }
     }
 
-    private int parseInt(CharSequence text, int defaultValue) {
-        if (text == null) {
-            return defaultValue;
-        }
-        Matcher matcher = INT.matcher(text);
-        if (matcher.find()) {
-            return Integer.parseInt(matcher.group());
-        }
-        return defaultValue;
+    @Override
+    public Object clone() {
+        return new ISO8601VariantDateFormat(zoneId);
     }
 }

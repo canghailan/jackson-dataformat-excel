@@ -1,6 +1,5 @@
 package cc.whohow.excel;
 
-import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.util.CellRangeAddress;
 
 import java.util.*;
@@ -17,16 +16,16 @@ public class ExcelDetector {
         this.excel = excel;
     }
 
-    public boolean hasKeys() {
-        return !(keys == null || keys.isEmpty());
+    protected boolean hasKeys() {
+        return keys != null && !keys.isEmpty();
     }
 
-    public boolean hasHeader() {
+    protected boolean hasHeader() {
         return headerRangeAddress != null && headerRangeAddress != NULL;
     }
 
     public List<ColumnKey> getKeys() {
-        return keys;
+        return hasKeys() ? keys : new ArrayList<>();
     }
 
     public void setKeys(List<ColumnKey> keys) {
@@ -34,19 +33,19 @@ public class ExcelDetector {
     }
 
     public CellRangeAddress getHeaderRangeAddress() {
-        return headerRangeAddress;
+        return hasHeader() ? headerRangeAddress : null;
     }
 
     public void setHeaderRangeAddress(CellRangeAddress headerRangeAddress) {
         this.headerRangeAddress = headerRangeAddress;
     }
 
-    public void setBodyRangeAddress(CellRangeAddress bodyRangeAddress) {
-        this.bodyRangeAddress = bodyRangeAddress;
-    }
-
     public CellRangeAddress getBodyRangeAddress() {
         return bodyRangeAddress;
+    }
+
+    public void setBodyRangeAddress(CellRangeAddress bodyRangeAddress) {
+        this.bodyRangeAddress = bodyRangeAddress;
     }
 
     public void detectKeys() {
@@ -55,22 +54,23 @@ public class ExcelDetector {
         }
         if (headerRangeAddress == null) {
             keys = new ExcelColumnKeys();
+            headerRangeAddress = NULL;
             return;
         }
 
         keys = new ArrayList<>();
-        for (int c = headerRangeAddress.getFirstColumn(), i = 0; c <= headerRangeAddress.getLastColumn(); c++, i++) {
-            Cell cell = excel.getCell(headerRangeAddress.getLastRow(), c);
-            String text = excel.formatCellValue(cell, null);
+        int c = headerRangeAddress.getFirstColumn();
+        for (String text : getHeaderText(headerRangeAddress)) {
             if (text == null || text.isEmpty()) {
                 break;
             }
-            keys.add(new ColumnKey(text, text, c));
+            keys.add(new ColumnKey(text, text, c++));
         }
     }
 
     public void detectHeaderRangeAddress() {
         if (headerRangeAddress != null) {
+            headerRangeAddress = excel.trimRight(headerRangeAddress);
             return;
         }
         CellRangeAddress sheetRangeAddress = excel.getSheetRangeAddress();
@@ -78,10 +78,8 @@ public class ExcelDetector {
             CellRangeAddress range = new CellRangeAddress(
                     r, r,
                     sheetRangeAddress.getFirstColumn(), sheetRangeAddress.getLastColumn());
-            range = excel.trimRight(range);
 
-            List<String> text = Arrays.asList(excel.getText(range, headerSeparator, null));
-            Map<String, Integer> keysIndex = matchKeys(keys, text);
+            Map<String, Integer> keysIndex = matchKeys(keys, getHeaderText(range));
             if (keysIndex.size() == keys.size()) {
                 headerRangeAddress = range;
                 break;
@@ -94,29 +92,18 @@ public class ExcelDetector {
             return;
         }
         CellRangeAddress sheetRangeAddress = excel.getSheetRangeAddress();
-        if (headerRangeAddress == null) {
-            bodyRangeAddress = sheetRangeAddress;
-        } else {
+        if (hasHeader()) {
             bodyRangeAddress = new CellRangeAddress(
                     headerRangeAddress.getLastRow() + 1, sheetRangeAddress.getLastRow(),
                     headerRangeAddress.getFirstColumn(), headerRangeAddress.getLastColumn());
+        } else {
+            bodyRangeAddress = sheetRangeAddress;
         }
     }
 
     public void detectKeysIndex() {
-        if (headerRangeAddress == null) {
-            int index = excel.getSheetRangeAddress().getFirstColumn();
-            for (ColumnKey key : keys) {
-                if (key.getIndex() >= 0) {
-                    index = key.getIndex();
-                } else {
-                    index++;
-                    key.setIndex(index);
-                }
-            }
-        } else {
-            List<String> text = Arrays.asList(excel.getText(headerRangeAddress, headerSeparator, null));
-            Map<String, Integer> keysIndex = matchKeys(keys, text);
+        if (hasHeader()) {
+            Map<String, Integer> keysIndex = matchKeys(keys, getHeaderText(headerRangeAddress));
             for (ColumnKey key : keys) {
                 if (key.getIndex() >= 0) {
                     continue;
@@ -126,12 +113,26 @@ public class ExcelDetector {
                     key.setIndex(index);
                 }
             }
+        } else {
+            int index = excel.getSheetRangeAddress().getFirstColumn() - 1;
+            for (ColumnKey key : keys) {
+                if (key.getIndex() >= 0) {
+                    index = key.getIndex();
+                } else {
+                    index++;
+                    key.setIndex(index);
+                }
+            }
         }
     }
 
     protected Map<String, Integer> matchKeys(List<ColumnKey> keys, List<String> text) {
         Map<String, Integer> keyIndex = new HashMap<>();
         for (ColumnKey key : keys) {
+            if (key.getIndex() >= 0) {
+                keyIndex.put(key.getName(), key.getIndex());
+                continue;
+            }
             int index = matchKey(key, text);
             if (index >= 0) {
                 keyIndex.put(key.getName(), index);
@@ -146,5 +147,9 @@ public class ExcelDetector {
             index = text.indexOf(key.getName());
         }
         return index;
+    }
+
+    protected List<String> getHeaderText(CellRangeAddress range) {
+        return Arrays.asList(excel.getText(excel.trimRight(range), headerSeparator, ""));
     }
 }
