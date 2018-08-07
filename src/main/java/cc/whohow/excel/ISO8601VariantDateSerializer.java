@@ -21,6 +21,6 @@ public class ISO8601VariantDateSerializer extends StdSerializer<Date> {
 
     @Override
     public void serialize(Date value, JsonGenerator gen, SerializerProvider provider) throws IOException {
-        gen.writeString(dateFormat.format(value));
+        gen.writeString((value == null) ? null : dateFormat.format(value));
     }
 }

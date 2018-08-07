@@ -6,6 +6,8 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import java.util.*;
 
 public class ExcelDetector {
+    private static final CellRangeAddress NULL = new CellRangeAddress(0, 0, 0, 0);
+    private String headerSeparator = "\n";
     private Excel excel;
     private List<ColumnKey> keys;
     private CellRangeAddress headerRangeAddress;
@@ -17,6 +19,10 @@ public class ExcelDetector {
 
     public boolean hasKeys() {
         return !(keys == null || keys.isEmpty());
+    }
+
+    public boolean hasHeader() {
+        return headerRangeAddress != null && headerRangeAddress != NULL;
     }
 
     public List<ColumnKey> getKeys() {
@@ -69,18 +75,15 @@ public class ExcelDetector {
         }
         CellRangeAddress sheetRangeAddress = excel.getSheetRangeAddress();
         for (int r = sheetRangeAddress.getFirstRow(); r <= sheetRangeAddress.getLastRow(); r++) {
-            List<String> text = Arrays.asList(excel.getRowText(excel.getRow(r), null));
+            CellRangeAddress range = new CellRangeAddress(
+                    r, r,
+                    sheetRangeAddress.getFirstColumn(), sheetRangeAddress.getLastColumn());
+            range = excel.trimRight(range);
+
+            List<String> text = Arrays.asList(excel.getText(range, headerSeparator, null));
             Map<String, Integer> keysIndex = matchKeys(keys, text);
             if (keysIndex.size() == keys.size()) {
-                int firstColumn = keysIndex.values().stream()
-                        .mapToInt(Integer::intValue)
-                        .min()
-                        .orElse(sheetRangeAddress.getFirstColumn());
-                int lastColumn = keysIndex.values().stream()
-                        .mapToInt(Integer::intValue)
-                        .max()
-                        .orElse(sheetRangeAddress.getLastColumn());
-                headerRangeAddress = new CellRangeAddress(r, r, firstColumn, lastColumn);
+                headerRangeAddress = range;
                 break;
             }
         }
@@ -112,7 +115,7 @@ public class ExcelDetector {
                 }
             }
         } else {
-            List<String> text = Arrays.asList(excel.getRowText(headerRangeAddress, null));
+            List<String> text = Arrays.asList(excel.getText(headerRangeAddress, headerSeparator, null));
             Map<String, Integer> keysIndex = matchKeys(keys, text);
             for (ColumnKey key : keys) {
                 if (key.getIndex() >= 0) {

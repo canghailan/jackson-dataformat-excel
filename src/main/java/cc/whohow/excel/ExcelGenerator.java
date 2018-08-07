@@ -29,7 +29,7 @@ public class ExcelGenerator extends GeneratorBase {
     protected Row row;
     protected Cell cell;
     protected boolean flushed;
-    protected Map<String, Integer> keyIndex = new HashMap<>();
+    protected Map<String, ColumnKey> keyIndex = new HashMap<>();
     protected Map<Integer, CellStyle> templateCellStyles = new HashMap<>();
 
     public ExcelGenerator(int features,
@@ -155,7 +155,7 @@ public class ExcelGenerator extends GeneratorBase {
     public void writeFieldName(String name) throws IOException {
         _writeContext.writeFieldName(name);
 
-        c = getColumn(name);
+        c = getColumnKey(name).getIndex();
         if (c < 0) {
             return;
         }
@@ -372,30 +372,33 @@ public class ExcelGenerator extends GeneratorBase {
     protected void _verifyValueWrite(String typeMsg) throws IOException {
     }
 
-    protected ColumnKey getKey(String name) {
-        int index = getKeyIndexByName(name);
-        return index < 0 ? null : keys.get(index);
+    protected ColumnKey getColumnKey(String name) {
+        return keyIndex.computeIfAbsent(name, this::findOrAddColumnKey);
     }
 
-    protected int getColumn(String name) {
-        int index = getKeyIndexByName(name);
-        return index < 0 ? -1 : bodyRangeAddress.getFirstColumn() + index;
-    }
-
-    protected int getKeyIndexByName(String name) {
-        return keyIndex.computeIfAbsent(name, this::findKeyIndexByName);
-    }
-
-    protected Integer findKeyIndexByName(String name) {
-        int index = 0;
+    protected ColumnKey findColumnKey(String name) {
         for (ColumnKey key : keys) {
             if (key.getName().equals(name)) {
-                return index;
+                return key;
             }
-            index++;
         }
-        keys.add(new ColumnKey(name, name, index));
-        return index;
+        return null;
+    }
+
+    protected ColumnKey addColumnKey(String name) {
+        int index = keys.stream()
+                .mapToInt(ColumnKey::getIndex)
+                .max()
+                .orElse(-1);
+        return new ColumnKey(name, name, index + 1);
+    }
+
+    protected ColumnKey findOrAddColumnKey(String name) {
+        ColumnKey key = findColumnKey(name);
+        if (key == null) {
+            key = addColumnKey(name);
+        }
+        return key;
     }
 
     protected CellStyle getTemplateCellStyle(Cell cell) {

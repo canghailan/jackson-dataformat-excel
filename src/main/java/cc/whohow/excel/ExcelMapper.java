@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 
 import java.io.IOException;
+import java.util.TimeZone;
 import java.util.function.Function;
 
 public class ExcelMapper extends ObjectMapper {
@@ -14,6 +15,8 @@ public class ExcelMapper extends ObjectMapper {
 
     public ExcelMapper(ExcelFactory factory) {
         super(factory);
+        setTimeZone(TimeZone.getDefault());
+        setDateFormat(new ISO8601VariantDateFormat());
     }
 
     public ExcelMapper(ExcelMapper mapper) {

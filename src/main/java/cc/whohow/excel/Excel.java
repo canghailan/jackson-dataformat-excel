@@ -6,6 +6,7 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.text.DateFormat;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.Date;
@@ -16,10 +17,10 @@ public class Excel {
     private static final Pattern CELL_RANGE_ADDRESS = Pattern
             .compile("(?<firstColumn>[A-Z]*)(?<firstRow>[0-9]*):?(?<lastColumn>[A-Z]*)(?<lastRow>[0-9]*)");
 
-    protected final ISO8601VariantDateFormat dateFormat = new ISO8601VariantDateFormat();
     protected final Workbook workbook;
     protected final Sheet sheet;
     protected final FormulaEvaluator formulaEvaluator;
+    protected DateFormat dateFormat;
     protected NumberFormat numberFormat;
 
     public Excel() {
@@ -30,6 +31,7 @@ public class Excel {
         this.workbook = sheet.getWorkbook();
         this.sheet = sheet;
         this.formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+        this.dateFormat = new ISO8601VariantDateFormat();
         this.numberFormat = new DecimalFormat("#.#");
         this.numberFormat.setGroupingUsed(false);
     }
@@ -42,6 +44,22 @@ public class Excel {
         this(version == SpreadsheetVersion.EXCEL97 ? new HSSFWorkbook() : new XSSFWorkbook());
     }
 
+    public DateFormat getDateFormat() {
+        return dateFormat;
+    }
+
+    public void setDateFormat(DateFormat dateFormat) {
+        this.dateFormat = dateFormat;
+    }
+
+    public NumberFormat getNumberFormat() {
+        return numberFormat;
+    }
+
+    public void setNumberFormat(NumberFormat numberFormat) {
+        this.numberFormat = numberFormat;
+    }
+
     public CellRangeAddress getSheetRangeAddress() {
         return new CellRangeAddress(
                 sheet.getFirstRowNum(), sheet.getLastRowNum(),
@@ -49,15 +67,21 @@ public class Excel {
     }
 
     public CellRangeAddress getTrimmedSheetRangeAddress() {
-        return null;
+        return trim(getSheetRangeAddress());
+    }
+
+    public CellRangeAddress getRowRangeAddress(int row) {
+        return getRowRangeAddress(getRow(row));
     }
 
     public CellRangeAddress getRowRangeAddress(Row row) {
-        return null;
-    }
-
-    public CellRangeAddress getTrimmedRowRangeAddress(Row row) {
-        return null;
+        if (row == null) {
+            return null;
+        }
+        if (row.getFirstCellNum() < 0) {
+            return new CellRangeAddress(row.getRowNum(), row.getRowNum(), 0, 0);
+        }
+        return new CellRangeAddress(row.getRowNum(), row.getRowNum(), row.getFirstCellNum(), row.getLastCellNum() - 1);
     }
 
     public CellRangeAddress getCellRangeAddress(String ref) {
@@ -102,10 +126,6 @@ public class Excel {
         throw new IllegalArgumentException("CellRangeAddress: " + ref);
     }
 
-    public CellRangeAddress getTrimmedCellRangeAddress(String ref) {
-        return getCellRangeAddress(ref);
-    }
-
     public Workbook getWorkbook() {
         return workbook;
     }
@@ -123,7 +143,7 @@ public class Excel {
     }
 
     public Cell getCell(Row row, int column) {
-        return normalizeCellValue(getCellWithMerges(row.getRowNum(), column));
+        return row == null ? null : getCell(row.getRowNum(), column);
     }
 
     public Cell getCell(int row, int column) {
@@ -174,7 +194,26 @@ public class Excel {
         return result;
     }
 
-    public String[] getRowText(Row row, String defaultValue) {
+    public String[] getText(CellRangeAddress range, String separator, String defaultValue) {
+        String[] result = new String[range.getLastColumn() - range.getFirstColumn() + 1];
+        if (range.getFirstRow() == range.getLastRow()) {
+            for (int i = 0, c = range.getFirstColumn(); i < result.length; i++, c++) {
+                result[i] = formatCellValue(getCell(range.getFirstRow(), c), defaultValue);
+            }
+            return result;
+        } else {
+            for (int i = 0, c = range.getFirstColumn(); i < result.length; i++, c++) {
+                String[] rows = new String[range.getLastRow() - range.getFirstRow() + 1];
+                for (int j = 0, r = range.getFirstRow(); j < rows.length; j++, r++) {
+                    rows[j] = formatCellValue(getCell(r, c), defaultValue);
+                }
+                result[i] = String.join(separator, rows);
+            }
+            return result;
+        }
+    }
+
+    public String[] getText(Row row, String defaultValue) {
         if (row == null || row.getLastCellNum() <= 0) {
             return new String[0];
         }
@@ -185,29 +224,11 @@ public class Excel {
         return result;
     }
 
-    public String[] getRowText(CellRangeAddress range, String defaultValue) {
-        return null;
+    public Object getCellValue(int row, int column) {
+        return getCellValue(getCell(row, column));
     }
 
-    public String[] getRowText(Row row, CellRangeAddress range, String defaultValue) {
-        CellRangeAddress trimmedRowRangeAddress = getTrimmedRowRangeAddress(row);
-        int first = range.getFirstColumn();
-        int last = range.getLastColumn();
-        if (last > trimmedRowRangeAddress.getLastColumn()) {
-            last = trimmedRowRangeAddress.getLastColumn();
-        }
-        if (last < first) {
-            return new String[0];
-        }
-
-        String[] result = new String[last - first + 1];
-        for (int i = 0, c = first; i < result.length; i++, c++) {
-            result[i] = formatCellValue(getCell(row, c), defaultValue);
-        }
-        return result;
-    }
-
-    protected Object getCellValue(Cell cell) {
+    public Object getCellValue(Cell cell) {
         if (cell == null) {
             return null;
         }
@@ -227,11 +248,11 @@ public class Excel {
         }
     }
 
-    protected String formatCellValue(Cell cell) {
+    public String formatCellValue(Cell cell) {
         return formatCellValue(cell, null);
     }
 
-    protected String formatCellValue(Cell cell, String defaultValue) {
+    public String formatCellValue(Cell cell, String defaultValue) {
         if (cell == null) {
             return defaultValue;
         }
@@ -251,19 +272,19 @@ public class Excel {
         }
     }
 
-    protected String format(Date dateValue) {
-        return dateFormat.format(dateValue);
+    public String format(Date dateValue) {
+        return (dateValue == null) ? null : dateFormat.format(dateValue);
     }
 
-    protected String format(double numericValue) {
+    public String format(double numericValue) {
         return numberFormat.format(numericValue);
     }
 
-    protected String format(boolean booleanValue) {
+    public String format(boolean booleanValue) {
         return Boolean.toString(booleanValue);
     }
 
-    protected boolean isEmptyCell(Cell cell) {
+    public boolean isEmptyCell(Cell cell) {
         if (cell == null) {
             return true;
         }
@@ -281,23 +302,108 @@ public class Excel {
         }
     }
 
-    protected boolean isEmptyRow(Row row, CellRangeAddress range) {
-        if (row == null) {
+    public boolean isEmptyRow(Row row) {
+        return isEmpty(getRowRangeAddress(row));
+    }
+
+    public boolean isEmpty(CellRangeAddress range) {
+        if (range == null) {
             return true;
         }
-        int first = range.getFirstColumn();
-        if (first < row.getFirstCellNum()) {
-            first = row.getFirstCellNum();
-        }
-        int last = range.getLastColumn();
-        if (last >= row.getLastCellNum()) {
-            last = row.getLastCellNum() - 1;
-        }
-        for (int c = first; c <= last; c++) {
-            if (!isEmptyCell(getCell(row.getRowNum(), c))) {
-                return false;
+        for (int r = range.getFirstRow(); r <= range.getLastRow(); r++) {
+            Row row = getRow(r);
+            if (row == null || row.getLastCellNum() < 0) {
+                continue;
+            }
+            int firstColumn = Integer.max(range.getFirstColumn(), row.getFirstCellNum());
+            int lastColumn = Integer.min(range.getLastColumn(), row.getLastCellNum() - 1);
+            for (int c = firstColumn; c <= lastColumn; c++) {
+                if (!isEmptyCell(getCell(row, c))) {
+                    return false;
+                }
             }
         }
         return true;
+    }
+
+    public CellRangeAddress trim(CellRangeAddress range) {
+        return trimLeft(trimRight(trimTop(trimBottom(range))));
+    }
+
+    public CellRangeAddress trimTop(CellRangeAddress range) {
+        if (range == null) {
+            return null;
+        }
+        int firstRow = range.getFirstRow();
+        while (firstRow < range.getLastRow()) {
+            if (isEmpty(new CellRangeAddress(firstRow, firstRow, range.getFirstColumn(), range.getLastColumn()))) {
+                firstRow++;
+            } else {
+                break;
+            }
+        }
+        return new CellRangeAddress(firstRow, range.getLastRow(), range.getFirstColumn(), range.getLastColumn());
+    }
+
+    public CellRangeAddress trimBottom(CellRangeAddress range) {
+        if (range == null) {
+            return null;
+        }
+        int lastRow = range.getLastRow();
+        while (lastRow >= range.getFirstRow()) {
+            if (isEmpty(new CellRangeAddress(lastRow, lastRow, range.getFirstColumn(), range.getLastColumn()))) {
+                lastRow--;
+            } else {
+                break;
+            }
+        }
+        return new CellRangeAddress(range.getFirstRow(), lastRow, range.getFirstColumn(), range.getLastColumn());
+    }
+
+    public CellRangeAddress trimLeft(CellRangeAddress range) {
+        if (range == null) {
+            return null;
+        }
+        int firstColumn = range.getFirstColumn();
+        while (firstColumn < range.getLastColumn()) {
+            if (isEmpty(new CellRangeAddress(range.getFirstRow(), range.getLastRow(), firstColumn, firstColumn))) {
+                firstColumn++;
+            } else {
+                break;
+            }
+        }
+        return new CellRangeAddress(range.getFirstRow(), range.getLastRow(), firstColumn, range.getLastColumn());
+    }
+
+    public CellRangeAddress trimRight(CellRangeAddress range) {
+        if (range == null) {
+            return null;
+        }
+        int lastColumn = range.getLastColumn();
+        while (lastColumn >= range.getFirstColumn()) {
+            if (isEmpty(new CellRangeAddress(range.getFirstRow(), range.getLastRow(), lastColumn, lastColumn))) {
+                lastColumn--;
+            } else {
+                break;
+            }
+        }
+        return new CellRangeAddress(range.getFirstRow(), range.getLastRow(), range.getFirstColumn(), lastColumn);
+    }
+
+    /**
+     * 求交集，无交集返回null
+     */
+    public CellRangeAddress intersect(CellRangeAddress range1, CellRangeAddress range2) {
+        int firstRow = Integer.max(range1.getFirstRow(), range2.getFirstRow());
+        int lastRow = Integer.min(range1.getLastRow(), range2.getLastRow());
+        if (firstRow > lastRow) {
+            return null;
+        }
+        int firstColumn = Integer.max(range1.getFirstColumn(), range2.getFirstColumn());
+        int lastColumn = Integer.min(range1.getLastColumn(), range2.getLastColumn());
+        if (firstColumn > lastColumn) {
+            return null;
+        }
+        return new CellRangeAddress(firstRow, lastRow, firstColumn, lastColumn);
     }
 }

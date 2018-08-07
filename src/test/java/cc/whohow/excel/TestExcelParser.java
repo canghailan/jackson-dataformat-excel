@@ -10,9 +10,9 @@ public class TestExcelParser {
     public void test() throws Exception {
         ExcelFactory factory = new ExcelFactory();
         try (ExcelParser parser = factory.createParser(new File("test.xlsx"))) {
-            ExcelSchema schema = new ExcelSchema()
-                    .withHeader(null);
-            parser.setSchema(schema);
+//            ExcelSchema schema = new ExcelSchema()
+//                    .withHeader(null);
+//            parser.setSchema(schema);
             while (true) {
                 JsonToken token = parser.nextToken();
                 if (token == null) {
