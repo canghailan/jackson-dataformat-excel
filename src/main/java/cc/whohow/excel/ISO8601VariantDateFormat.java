@@ -22,7 +22,6 @@ public class ISO8601VariantDateFormat extends DateFormat {
                     "(?<minute>\\D+(?<m1>\\d{1,2})|(?<m2>\\d{2}))?" +
                     "(?<second>\\D+(?<s1>\\d{1,2})|(?<s2>\\d{2}))?" +
                     "(?<millisecond>\\D+(?<S1>\\d{1,3})|(?<S2>\\d{3}))?");
-    protected static final Pattern INT = Pattern.compile("\\d+");
 
     protected ZoneId zoneId;
 

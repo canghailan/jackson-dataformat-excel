@@ -48,14 +48,19 @@ public class ExcelMapper extends ObjectMapper {
     @Override
     protected ObjectReader _newReader(DeserializationConfig config, JavaType valueType, Object valueToUpdate, FormatSchema schema, InjectableValues injectableValues) {
         if (schema == null) {
-            schema = schemaFor(valueType, getDeserializationConfig()::introspect);
+            ExcelSchema excelSchema = schemaFor(valueType, config::introspect);
+            if (!excelSchema.getKeys().isEmpty()) {
+                excelSchema.withHeader(null).withBody(null);
+            }
+            schema = excelSchema;
         }
         return super._newReader(config, valueType, valueToUpdate, schema, injectableValues);
     }
 
     @Override
     protected ObjectWriter _newWriter(SerializationConfig config, JavaType rootType, PrettyPrinter pp) {
-        return super._newWriter(config, rootType, pp).with(schemaFor(rootType, config::introspect));
+        return super._newWriter(config, rootType, pp)
+                .with(schemaFor(rootType, config::introspect));
     }
 
     public ExcelSchema schemaFor(JavaType type, Function<JavaType, ? extends BeanDescription> introspect) {
@@ -80,11 +85,6 @@ public class ExcelMapper extends ObjectMapper {
             Integer index = prop.getMetadata().getIndex();
             schema.addKey(name, description == null ? name : description, index == null ? -1 : index);
         }
-        if (schema.getKeys().isEmpty()) {
-            return schema;
-        }
-        return schema
-                .withHeader(null)
-                .withBody(null);
+        return schema;
     }
 }

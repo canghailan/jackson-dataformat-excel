@@ -28,15 +28,13 @@ public class ExcelGenerator extends GeneratorBase {
     protected ExcelSchema schema;
     protected CellRangeAddress headerRangeAddress;
     protected CellRangeAddress bodyRangeAddress;
-    protected List<ColumnKey> keys;
 
     // generator state
-    protected int r;
-    protected int c;
-    protected Row row;
-    protected Cell cell;
+    protected int currentRowIndex;
+    protected String currentKeyName;
+    protected Row currentRow;
     protected boolean flushed;
-    protected Map<String, ColumnKey> keyIndex = new HashMap<>();
+    protected Map<String, ColumnKey> keys = new HashMap<>();
     protected Map<Integer, CellStyle> templateCellStyles = new HashMap<>();
 
     public ExcelGenerator(int features,
@@ -70,7 +68,7 @@ public class ExcelGenerator extends GeneratorBase {
                 excel = new Excel(template.getSheet(schema.getSheetName()));
             } else if (0 <= schema.getSheetIndex() && schema.getSheetIndex() < template.getNumberOfSheets()) {
                 excel = new Excel(template.getSheetAt(schema.getSheetIndex()));
-            } else if (0 <= template.getActiveSheetIndex() && template.getActiveSheetIndex() < template.getNumberOfSheets()) {
+            } else if (template.getActiveSheetIndex() < template.getNumberOfSheets()) {
                 excel = new Excel(template.getSheetAt(template.getActiveSheetIndex()));
             } else {
                 excel = new Excel(template.createSheet());
@@ -90,15 +88,16 @@ public class ExcelGenerator extends GeneratorBase {
         excelDetector.setBodyRangeAddress(bodyRangeAddress);
         excelDetector.detectHeaderRangeAddress();
         excelDetector.detectBodyRangeAddress();
-        keys = excelDetector.getKeys();
+        excelDetector.detectKeysIndex();
         headerRangeAddress = excelDetector.getHeaderRangeAddress();
         bodyRangeAddress = excelDetector.getBodyRangeAddress();
+        List<ColumnKey> keys = excelDetector.getKeys();
+        for (ColumnKey key : keys) {
+            this.keys.put(key.getName(), key);
+        }
 
-        row = null;
-        cell = null;
-
-        r = bodyRangeAddress.getFirstRow() - 1;
-        c = bodyRangeAddress.getFirstColumn() - 1;
+        setCurrentRow(-1);
+        setCurrentKey(null);
 
         _writeContext = JsonWriteContext.createRootContext(null);
     }
@@ -106,20 +105,12 @@ public class ExcelGenerator extends GeneratorBase {
     @Override
     public void writeStartArray() throws IOException {
         initialize();
-
-        r = bodyRangeAddress.getFirstRow();
-        c = bodyRangeAddress.getFirstColumn() - 1;
-        row = null;
-        cell = null;
+        setCurrentRow(bodyRangeAddress.getFirstRow());
     }
 
     @Override
     public void writeEndArray() throws IOException {
         writeHeader();
-
-        c = bodyRangeAddress.getFirstColumn() - 1;
-        row = null;
-        cell = null;
     }
 
     protected void writeHeader() {
@@ -127,46 +118,37 @@ public class ExcelGenerator extends GeneratorBase {
             return;
         }
 
-        r = headerRangeAddress.getLastRow();
-        row = excel.createRow(r);
-
-        c = headerRangeAddress.getFirstColumn();
-        for (ColumnKey key : keys) {
-            cell = excel.createCell(row, c);
-
-            if (key.getDescription() == null || key.getDescription().isEmpty()) {
-                cell.setCellValue(key.getName());
-            } else {
-                cell.setCellValue(key.getDescription());
+        Row row = excel.createRow(headerRangeAddress.getLastRow());
+        for (ColumnKey key : keys.values()) {
+            if (key.getIndex() < 0) {
+                continue;
             }
-
-            c++;
+            Cell cell = excel.createCell(row, key.getIndex());
+            if (!excel.isEmptyCell(cell)) {
+                continue;
+            }
+            String value = key.getDescription();
+            if (value == null || value.isEmpty()) {
+                value = key.getName();
+            }
+            cell.setCellValue(value);
         }
     }
 
     @Override
     public void writeStartObject() throws IOException {
-        c = bodyRangeAddress.getFirstColumn();
-        row = excel.createRow(r);
-        cell = null;
+        createRow();
     }
 
     @Override
     public void writeEndObject() throws IOException {
-        r++;
-        c = bodyRangeAddress.getFirstColumn() - 1;
-        cell = null;
+        setCurrentRow(getCurrentRow() + 1);
     }
 
     @Override
     public void writeFieldName(String name) throws IOException {
         _writeContext.writeFieldName(name);
-
-        c = getColumnKey(name).getIndex();
-        if (c < 0) {
-            return;
-        }
-        cell = excel.createCell(row, c);
+        setCurrentKey(name);
     }
 
     @Override
@@ -174,6 +156,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write string");
         setCurrentValue(text);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -201,6 +184,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write raw");
         setCurrentValue(text);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -217,6 +201,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write raw");
         setCurrentValue(text);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -253,6 +238,7 @@ public class ExcelGenerator extends GeneratorBase {
         String base64 = bv.encode(buffer);
         setCurrentValue(base64);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -275,6 +261,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write number");
         setCurrentValue(v);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -288,6 +275,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write number");
         setCurrentValue(v);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -305,6 +293,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write number");
         setCurrentValue(v);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -318,6 +307,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write number");
         setCurrentValue(encodedValue);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -330,6 +320,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write boolean");
         setCurrentValue(state);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -342,6 +333,7 @@ public class ExcelGenerator extends GeneratorBase {
         _verifyValueWrite("write null");
         setCurrentValue(null);
 
+        Cell cell = createCell();
         if (cell == null) {
             return;
         }
@@ -379,40 +371,60 @@ public class ExcelGenerator extends GeneratorBase {
     protected void _verifyValueWrite(String typeMsg) throws IOException {
     }
 
-    protected ColumnKey getColumnKey(String name) {
-        return keyIndex.computeIfAbsent(name, this::findOrAddColumnKey);
-    }
-
-    protected ColumnKey findColumnKey(String name) {
-        for (ColumnKey key : keys) {
-            if (key.getName().equals(name)) {
-                return key;
-            }
-        }
-        return null;
-    }
-
-    protected ColumnKey addColumnKey(String name) {
-        int index = keys.stream()
-                .mapToInt(ColumnKey::getIndex)
-                .max()
-                .orElse(-1);
-        return new ColumnKey(name, name, index + 1);
-    }
-
-    protected ColumnKey findOrAddColumnKey(String name) {
-        ColumnKey key = findColumnKey(name);
-        if (key == null) {
-            key = addColumnKey(name);
-        }
-        return key;
-    }
-
     protected CellStyle getTemplateCellStyle(Cell cell) {
         return templateCellStyles.computeIfAbsent(cell.getColumnIndex(), this::getTemplateCellStyle);
     }
 
     protected CellStyle getTemplateCellStyle(int column) {
         return excel.createCell(bodyRangeAddress.getFirstRow(), column).getCellStyle();
+    }
+
+    protected ColumnKey getColumnKey(String name) {
+        return keys.computeIfAbsent(name, this::addColumnKey);
+    }
+
+    protected ColumnKey addColumnKey(String name) {
+        int index = keys.values().stream()
+                .mapToInt(ColumnKey::getIndex)
+                .max()
+                .orElse(-1);
+        return new ColumnKey(name, name, index + 1);
+    }
+
+    protected int getCurrentRow() {
+        return currentRowIndex;
+    }
+
+    protected void setCurrentRow(int row) {
+        this.currentRowIndex = row;
+    }
+
+    protected void setCurrentKey(String name) {
+        this.currentKeyName = name;
+    }
+
+    protected ColumnKey getCurrentColumnKey() {
+        return getColumnKey(currentKeyName);
+    }
+
+    protected Row createRow() {
+        if (currentRow == null || currentRow.getRowNum() != currentRowIndex) {
+            if (currentRowIndex >= 0) {
+                currentRow = excel.createRow(currentRowIndex);
+            }
+        }
+        return currentRow;
+    }
+
+    protected Cell createCell() {
+        ColumnKey key = getCurrentColumnKey();
+        if (key == null || key.getIndex() < 0) {
+            return null;
+        }
+        Row row = createRow();
+        if (row == null) {
+            return null;
+        }
+        return excel.createCell(row, key.getIndex());
     }
 }

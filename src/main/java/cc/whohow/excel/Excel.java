@@ -40,7 +40,9 @@ public class Excel {
     }
 
     public Excel(Workbook workbook) {
-        this(workbook.getSheetAt(workbook.getActiveSheetIndex()));
+        this(workbook.getActiveSheetIndex() < workbook.getNumberOfSheets() ?
+                workbook.getSheetAt(workbook.getActiveSheetIndex()) :
+                workbook.createSheet());
     }
 
     public Excel(SpreadsheetVersion version) {
@@ -357,7 +359,7 @@ public class Excel {
             return null;
         }
         int lastRow = range.getLastRow();
-        while (lastRow >= range.getFirstRow()) {
+        while (lastRow > range.getFirstRow()) {
             if (isEmpty(new CellRangeAddress(lastRow, lastRow, range.getFirstColumn(), range.getLastColumn()))) {
                 lastRow--;
             } else {
@@ -387,7 +389,7 @@ public class Excel {
             return null;
         }
         int lastColumn = range.getLastColumn();
-        while (lastColumn >= range.getFirstColumn()) {
+        while (lastColumn > range.getFirstColumn()) {
             if (isEmpty(new CellRangeAddress(range.getFirstRow(), range.getLastRow(), lastColumn, lastColumn))) {
                 lastColumn--;
             } else {

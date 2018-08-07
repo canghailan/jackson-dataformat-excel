@@ -8,6 +8,7 @@ import java.util.Date;
 public class DataModel {
     private Long id;
     @JsonProperty(index = 1)
+    @JsonPropertyDescription("幼儿园")
     private String name;
     @JsonPropertyDescription("省")
     private String province;

@@ -102,19 +102,24 @@ public class ExcelDetector {
     }
 
     public void detectKeysIndex() {
+        int index = excel.getSheetRangeAddress().getFirstColumn() - 1;
         if (hasHeader()) {
             Map<String, Integer> keysIndex = matchKeys(keys, getHeaderText(headerRangeAddress));
             for (ColumnKey key : keys) {
                 if (key.getIndex() >= 0) {
+                    index = key.getIndex();
                     continue;
                 }
-                Integer index = keysIndex.get(key.getName());
-                if (index != null) {
+                Integer keyIndex = keysIndex.get(key.getName());
+                if (keyIndex != null) {
+                    index = keyIndex;
+                    key.setIndex(index);
+                } else {
+                    index++;
                     key.setIndex(index);
                 }
             }
         } else {
-            int index = excel.getSheetRangeAddress().getFirstColumn() - 1;
             for (ColumnKey key : keys) {
                 if (key.getIndex() >= 0) {
                     index = key.getIndex();
