@@ -5,7 +5,8 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import java.util.*;
 
 public class ExcelDetector {
-    private static final CellRangeAddress NULL = new CellRangeAddress(0, 0, 0, 0);
+    private static final List<ColumnKey> AUTO_KEYS = new ArrayList<>(0);
+    private static final CellRangeAddress AUTO_RANGE = new CellRangeAddress(0, 0, 0, 0);
     private String headerSeparator = "\n";
     private Excel excel;
     private List<ColumnKey> keys;
@@ -14,6 +15,21 @@ public class ExcelDetector {
 
     public ExcelDetector(Excel excel) {
         this.excel = excel;
+        this.keys = AUTO_KEYS;
+        this.headerRangeAddress = AUTO_RANGE;
+        this.bodyRangeAddress = AUTO_RANGE;
+    }
+
+    public boolean isAutoKeys() {
+        return keys == AUTO_KEYS;
+    }
+
+    public boolean isAutoHeader() {
+        return headerRangeAddress == AUTO_RANGE;
+    }
+
+    public boolean isAutoBody() {
+        return bodyRangeAddress == AUTO_RANGE;
     }
 
     protected boolean hasKeys() {
@@ -21,7 +37,7 @@ public class ExcelDetector {
     }
 
     protected boolean hasHeader() {
-        return headerRangeAddress != null && headerRangeAddress != NULL;
+        return headerRangeAddress != null && headerRangeAddress != AUTO_RANGE;
     }
 
     public List<ColumnKey> getKeys() {
@@ -54,7 +70,7 @@ public class ExcelDetector {
         }
         if (headerRangeAddress == null) {
             keys = new ExcelColumnKeys();
-            headerRangeAddress = NULL;
+            headerRangeAddress = AUTO_RANGE;
             return;
         }
 
