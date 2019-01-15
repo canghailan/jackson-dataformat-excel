@@ -17,7 +17,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ExcelGenerator extends GeneratorBase {
@@ -74,26 +73,12 @@ public class ExcelGenerator extends GeneratorBase {
                 excel = new Excel(template.createSheet());
             }
         }
+        schema.detect(excel);
 
-        if (schema.getHeaderRangeAddress() != null) {
-            headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
-        }
-        if (schema.getBodyRangeAddress() != null) {
-            bodyRangeAddress = excel.getCellRangeAddress(schema.getBodyRangeAddress());
-        }
-
-        ExcelDetector excelDetector = new ExcelDetector(excel);
-        excelDetector.setKeys(schema.getKeys());
-        excelDetector.setHeaderRangeAddress(headerRangeAddress);
-        excelDetector.setBodyRangeAddress(bodyRangeAddress);
-        excelDetector.detectHeaderRangeAddress();
-        excelDetector.detectBodyRangeAddress();
-        excelDetector.detectKeysIndex();
-        headerRangeAddress = excelDetector.getHeaderRangeAddress();
-        bodyRangeAddress = excelDetector.getBodyRangeAddress();
-        List<ColumnKey> keys = excelDetector.getKeys();
-        for (ColumnKey key : keys) {
-            this.keys.put(key.getName(), key);
+        headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
+        bodyRangeAddress = excel.getCellRangeAddress(schema.getBodyRangeAddress());
+        for (ColumnKey key : schema.getKeys()) {
+            keys.put(key.getName(), key);
         }
 
         setCurrentRow(-1);

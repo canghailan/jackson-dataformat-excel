@@ -91,31 +91,18 @@ public class ExcelParser extends ParserMinimalBase {
             } else {
                 excel = new Excel(workbook.getSheetAt(workbook.getActiveSheetIndex()));
             }
+            schema.detect(excel);
         } catch (InvalidFormatException e) {
             throw new JsonParseException(this, e.getMessage(), e);
         }
 
-        if (schema.getHeaderRangeAddress() != null) {
-            headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
-        }
-        if (schema.getBodyRangeAddress() != null) {
-            bodyRangeAddress = excel.getCellRangeAddress(schema.getBodyRangeAddress());
-        }
-
-        ExcelDetector excelDetector = new ExcelDetector(excel);
-        excelDetector.setKeys(schema.getKeys());
-        excelDetector.setHeaderRangeAddress(headerRangeAddress);
-        excelDetector.setBodyRangeAddress(bodyRangeAddress);
-        excelDetector.detectKeys();
-        excelDetector.detectHeaderRangeAddress();
-        excelDetector.detectBodyRangeAddress();
-        excelDetector.detectKeysIndex();
-        keys = excelDetector.getKeys();
-        headerRangeAddress = excelDetector.getHeaderRangeAddress();
-        bodyRangeAddress = excelDetector.getBodyRangeAddress();
+        keys = schema.getKeys();
+        headerRangeAddress = excel.getCellRangeAddress(schema.getHeaderRangeAddress());
+        bodyRangeAddress = excel.getCellRangeAddress(schema.getBodyRangeAddress());
 
         setCurrentRow(BEFORE_START);
         setCurrentKey(BEFORE_START);
+
         parsingContext = JsonReadContext.createRootContext(getCurrentRow(), getCurrentColumn(), null);
     }
 

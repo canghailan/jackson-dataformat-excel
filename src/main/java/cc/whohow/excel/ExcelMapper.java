@@ -4,10 +4,12 @@ import com.fasterxml.jackson.core.FormatSchema;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.PrettyPrinter;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.TimeZone;
 import java.util.function.Function;
 
@@ -40,7 +42,7 @@ public class ExcelMapper extends ObjectMapper {
     @Override
     protected JsonToken _initForReading(JsonParser p, JavaType targetType) throws IOException {
         if (p.getSchema() == null) {
-            p.setSchema(schemaFor(targetType, getDeserializationConfig()::introspect));
+            p.setSchema(schemaForReader(targetType));
         }
         return super._initForReading(p, targetType);
     }
@@ -48,11 +50,7 @@ public class ExcelMapper extends ObjectMapper {
     @Override
     protected ObjectReader _newReader(DeserializationConfig config, JavaType valueType, Object valueToUpdate, FormatSchema schema, InjectableValues injectableValues) {
         if (schema == null) {
-            ExcelSchema excelSchema = schemaFor(valueType, config::introspect);
-            if (!excelSchema.getKeys().isEmpty()) {
-                excelSchema.withHeader(null).withBody(null);
-            }
-            schema = excelSchema;
+            schema = schemaFor(valueType, config::introspect);
         }
         return super._newReader(config, valueType, valueToUpdate, schema, injectableValues);
     }
@@ -61,6 +59,30 @@ public class ExcelMapper extends ObjectMapper {
     protected ObjectWriter _newWriter(SerializationConfig config, JavaType rootType, PrettyPrinter pp) {
         return super._newWriter(config, rootType, pp)
                 .with(schemaFor(rootType, config::introspect));
+    }
+
+    public ExcelSchema schemaForReader(Type type) {
+        return schemaFor(getTypeFactory().constructType(type), getDeserializationConfig()::introspect);
+    }
+
+    public ExcelSchema schemaForReader(TypeReference<?> type) {
+        return schemaFor(getTypeFactory().constructType(type), getDeserializationConfig()::introspect);
+    }
+
+    public ExcelSchema schemaForReader(JavaType type) {
+        return schemaFor(type, getDeserializationConfig()::introspect);
+    }
+
+    public ExcelSchema schemaForWriter(Type type) {
+        return schemaFor(getTypeFactory().constructType(type), getSerializationConfig()::introspect);
+    }
+
+    public ExcelSchema schemaForWriter(TypeReference<?> type) {
+        return schemaFor(getTypeFactory().constructType(type), getSerializationConfig()::introspect);
+    }
+
+    public ExcelSchema schemaForWriter(JavaType type) {
+        return schemaFor(type, getSerializationConfig()::introspect);
     }
 
     public ExcelSchema schemaFor(JavaType type, Function<JavaType, ? extends BeanDescription> introspect) {
@@ -72,7 +94,6 @@ public class ExcelMapper extends ObjectMapper {
             dataType = type.getContentType();
         }
         return schemaFor(introspect.apply(dataType));
-
     }
 
     public ExcelSchema schemaFor(BeanDescription beanDescription) {

@@ -10,10 +10,10 @@ public class TestExcelGenerator {
     @Test
     public void test() throws Exception {
         ExcelMapper mapper = new ExcelMapper();
-        List<DataModel> data = mapper.readValue(new File("test.xlsx"), new TypeReference<List<DataModel>>() {
-        });
+        ExcelSchema schema = mapper.schemaForReader(DataModel1.class);
+        List<DataModel1> data = mapper.reader(schema).forType(new TypeReference<List<DataModel1>>() {
+        }).readValue(new File("test.xlsx"));
         System.out.println(data);
-        mapper.writerFor(new TypeReference<List<DataModel>>() {
-        }).writeValue(new File("test-generator.xlsx"), data);
+        mapper.writer(schema).writeValue(new File("test-generator.xlsx"), data);
     }
 }

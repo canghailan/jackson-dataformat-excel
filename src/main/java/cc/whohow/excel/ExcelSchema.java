@@ -10,8 +10,8 @@ public class ExcelSchema implements FormatSchema {
     private SpreadsheetVersion version = SpreadsheetVersion.EXCEL2007;
     private int sheetIndex = -1;
     private String sheetName = null;
-    private String headerRangeAddress = "1:1";
-    private String bodyRangeAddress = "2:";
+    private String headerRangeAddress = null;
+    private String bodyRangeAddress = null;
     private List<ColumnKey> keys = new ArrayList<>();
 
     @Override
@@ -91,5 +91,21 @@ public class ExcelSchema implements FormatSchema {
 
     public List<ColumnKey> getKeys() {
         return keys;
+    }
+
+    public void detect(Excel excel) {
+        ExcelDetector excelDetector = new ExcelDetector(excel);
+        excelDetector.withKeys(keys);
+        if (headerRangeAddress != null) {
+            excelDetector.withHeaderRangeAddress(excel.getCellRangeAddress(headerRangeAddress));
+        }
+        if (bodyRangeAddress != null) {
+            excelDetector.withBodyRangeAddress(excel.getCellRangeAddress(bodyRangeAddress));
+        }
+        if (excelDetector.call()) {
+            keys = excelDetector.getKeys();
+            headerRangeAddress = excelDetector.getHeaderRangeAddress().formatAsString();
+            bodyRangeAddress = excelDetector.getBodyRangeAddress().formatAsString();
+        }
     }
 }

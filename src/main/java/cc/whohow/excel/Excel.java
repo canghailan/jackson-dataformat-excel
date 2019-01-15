@@ -71,7 +71,7 @@ public class Excel {
                 sheet.getLeftCol(), workbook.getSpreadsheetVersion().getLastColumnIndex());
     }
 
-    public CellRangeAddress getTrimmedSheetRangeAddress() {
+    public CellRangeAddress getAndTrimSheetRangeAddress() {
         return trim(getSheetRangeAddress());
     }
 

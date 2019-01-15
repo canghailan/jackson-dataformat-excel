@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 
 import java.util.Date;
 
-public class DataModel {
+public class DataModel1 {
     private Long id;
     @JsonProperty(index = 1)
     @JsonPropertyDescription("幼儿园")
@@ -171,7 +171,7 @@ public class DataModel {
 
     @Override
     public String toString() {
-        return "DataModel{" +
+        return "DataModel1{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", province='" + province + '\'' +

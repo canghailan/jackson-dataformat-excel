@@ -3,21 +3,47 @@ package cc.whohow.excel;
 import org.apache.poi.ss.util.CellRangeAddress;
 
 import java.util.*;
+import java.util.concurrent.Callable;
 
-public class ExcelDetector {
-    private static final List<ColumnKey> AUTO_KEYS = new ArrayList<>(0);
+/**
+ * Excel布局自动推测
+ */
+public class ExcelDetector implements Callable<Boolean> {
+    private static final List<ColumnKey> AUTO_KEYS = Collections.emptyList();
     private static final CellRangeAddress AUTO_RANGE = new CellRangeAddress(0, 0, 0, 0);
-    private String headerSeparator = "\n";
     private Excel excel;
+    private String headerSeparator;
     private List<ColumnKey> keys;
     private CellRangeAddress headerRangeAddress;
     private CellRangeAddress bodyRangeAddress;
 
     public ExcelDetector(Excel excel) {
         this.excel = excel;
+        this.headerSeparator = "\r\n";
         this.keys = AUTO_KEYS;
         this.headerRangeAddress = AUTO_RANGE;
         this.bodyRangeAddress = AUTO_RANGE;
+    }
+
+    public ExcelDetector withKeys(List<ColumnKey> keys) {
+        if (keys != null && !keys.isEmpty()) {
+            this.keys = keys;
+        }
+        return this;
+    }
+
+    public ExcelDetector withHeaderRangeAddress(CellRangeAddress headerRangeAddress) {
+        if (headerRangeAddress != null) {
+            this.headerRangeAddress = headerRangeAddress;
+        }
+        return this;
+    }
+
+    public ExcelDetector withBodyRangeAddress(CellRangeAddress bodyRangeAddress) {
+        if (bodyRangeAddress != null) {
+            this.bodyRangeAddress = bodyRangeAddress;
+        }
+        return this;
     }
 
     public boolean isAutoKeys() {
@@ -32,16 +58,16 @@ public class ExcelDetector {
         return bodyRangeAddress == AUTO_RANGE;
     }
 
-    protected boolean hasKeys() {
-        return keys != null && !keys.isEmpty();
+    public String getHeaderSeparator() {
+        return headerSeparator;
     }
 
-    protected boolean hasHeader() {
-        return headerRangeAddress != null && headerRangeAddress != AUTO_RANGE;
+    public void setHeaderSeparator(String headerSeparator) {
+        this.headerSeparator = headerSeparator;
     }
 
     public List<ColumnKey> getKeys() {
-        return hasKeys() ? keys : new ArrayList<>();
+        return isAutoKeys() ? new ArrayList<>() : keys;
     }
 
     public void setKeys(List<ColumnKey> keys) {
@@ -49,7 +75,7 @@ public class ExcelDetector {
     }
 
     public CellRangeAddress getHeaderRangeAddress() {
-        return hasHeader() ? headerRangeAddress : null;
+        return isAutoHeader() ? null : headerRangeAddress;
     }
 
     public void setHeaderRangeAddress(CellRangeAddress headerRangeAddress) {
@@ -64,113 +90,151 @@ public class ExcelDetector {
         this.bodyRangeAddress = bodyRangeAddress;
     }
 
-    public void detectKeys() {
-        if (hasKeys()) {
-            return;
+    @Override
+    public Boolean call() {
+        if (!isAutoKeys() && !isAutoHeader() && !isAutoBody()) {
+            return true;
         }
-        if (headerRangeAddress == null) {
-            keys = new ExcelColumnKeys();
-            headerRangeAddress = AUTO_RANGE;
-            return;
-        }
-
-        keys = new ArrayList<>();
-        int c = headerRangeAddress.getFirstColumn();
-        for (String text : getHeaderText(headerRangeAddress)) {
-            if (text == null || text.isEmpty()) {
-                break;
+        CellRangeAddress sheetRangeAddress = excel.getAndTrimSheetRangeAddress();
+        if (isAutoHeader()) {
+            // 如果Header需要推测
+            if (!isAutoKeys()) {
+                // 优先使用Keys进行推测
+                detectHeaderByKeys(sheetRangeAddress);
+            } else if (!isAutoBody()) {
+                // 否则使用Body进行推测
+                detectHeaderByBody(sheetRangeAddress);
+            } else {
+                // 默认Header
+                usingDefaultHeader(sheetRangeAddress);
             }
-            keys.add(new ColumnKey(text, text, c++));
         }
+        if (isAutoHeader()) {
+            // Header推测失败
+            return false;
+        }
+        if (isAutoBody()) {
+            // 如果Body需要推测，使用Header信息进行推测
+            detectBodyByHeader(sheetRangeAddress);
+        }
+        if (isAutoKeys()) {
+            // 如果Keys需要推测，使用Header信息进行推测
+            detectKeysByHeader();
+        } else if (isKeysNeedUpdate()) {
+            // 更新Keys
+            updateKeysByHeader();
+        }
+        return true;
     }
 
-    public void detectHeaderRangeAddress() {
-        if (headerRangeAddress != null) {
-            headerRangeAddress = excel.trimRight(headerRangeAddress);
-            return;
-        }
-        CellRangeAddress sheetRangeAddress = excel.getSheetRangeAddress();
+    protected void detectHeaderByKeys(CellRangeAddress sheetRangeAddress) {
+        // 根据Keys推测Header：逐行扫描，最匹配Keys的行作为Header
+        Map<String, Integer> keysIndex = Collections.emptyMap();
         for (int r = sheetRangeAddress.getFirstRow(); r <= sheetRangeAddress.getLastRow(); r++) {
             CellRangeAddress range = new CellRangeAddress(
                     r, r,
                     sheetRangeAddress.getFirstColumn(), sheetRangeAddress.getLastColumn());
 
-            Map<String, Integer> keysIndex = matchKeys(keys, getHeaderText(range));
-            if (keysIndex.size() == keys.size()) {
+            Map<String, Integer> matchKeysIndex = matchKeys(range);
+            if (matchKeysIndex.size() > keysIndex.size()) {
                 headerRangeAddress = range;
-                break;
+                keysIndex = matchKeysIndex;
+                if (matchKeysIndex.size() == keys.size()) {
+                    break;
+                }
             }
         }
-    }
-
-    public void detectBodyRangeAddress() {
-        if (bodyRangeAddress != null) {
-            return;
-        }
-        CellRangeAddress sheetRangeAddress = excel.getSheetRangeAddress();
-        if (hasHeader()) {
-            bodyRangeAddress = new CellRangeAddress(
-                    headerRangeAddress.getLastRow() + 1, sheetRangeAddress.getLastRow(),
-                    headerRangeAddress.getFirstColumn(), headerRangeAddress.getLastColumn());
-        } else {
-            bodyRangeAddress = sheetRangeAddress;
-        }
-    }
-
-    public void detectKeysIndex() {
-        int index = excel.getSheetRangeAddress().getFirstColumn() - 1;
-        if (hasHeader()) {
-            Map<String, Integer> keysIndex = matchKeys(keys, getHeaderText(headerRangeAddress));
+        if (acceptKeysIndex(keysIndex)) {
+            // 采纳匹配结果，更新Keys
             for (ColumnKey key : keys) {
-                if (key.getIndex() >= 0) {
-                    index = key.getIndex();
-                    continue;
-                }
-                Integer keyIndex = keysIndex.get(key.getName());
-                if (keyIndex != null) {
-                    index = keyIndex;
-                    key.setIndex(index);
-                } else {
-                    index++;
-                    key.setIndex(index);
+                if (key.getIndex() < 0) {
+                    key.setIndex(keysIndex.getOrDefault(key.getName(), -1));
                 }
             }
         } else {
-            for (ColumnKey key : keys) {
-                if (key.getIndex() >= 0) {
-                    index = key.getIndex();
-                } else {
-                    index++;
-                    key.setIndex(index);
-                }
-            }
+            headerRangeAddress = AUTO_RANGE;
         }
     }
 
-    protected Map<String, Integer> matchKeys(List<ColumnKey> keys, List<String> text) {
+    protected boolean acceptKeysIndex(Map<String, Integer> keysIndex) {
+        return !keysIndex.isEmpty();
+    }
+
+    protected Map<String, Integer> matchKeys(CellRangeAddress headerRangeAddress) {
+        // 行匹配Keys
+        List<String> headers = getHeaders(headerRangeAddress);
         Map<String, Integer> keyIndex = new HashMap<>();
         for (ColumnKey key : keys) {
             if (key.getIndex() >= 0) {
                 keyIndex.put(key.getName(), key.getIndex());
                 continue;
             }
-            int index = matchKey(key, text);
+            int index = matchKey(key, headers);
             if (index >= 0) {
-                keyIndex.put(key.getName(), index);
+                keyIndex.putIfAbsent(key.getName(), headerRangeAddress.getFirstColumn() + index);
             }
         }
         return keyIndex;
     }
 
-    protected int matchKey(ColumnKey key, List<String> text) {
-        int index = text.indexOf(key.getDescription());
+    protected int matchKey(ColumnKey key, List<String> header) {
+        // 列匹配Key
+        int index = header.indexOf(key.getDescription());
         if (index < 0) {
-            index = text.indexOf(key.getName());
+            index = header.indexOf(key.getName());
         }
         return index;
     }
 
-    protected List<String> getHeaderText(CellRangeAddress range) {
-        return Arrays.asList(excel.getText(excel.trimRight(range), headerSeparator, ""));
+    protected void detectHeaderByBody(CellRangeAddress sheetRangeAddress) {
+        // 根据Body推测Header，从Sheet第一行到Body的上一行为Header
+        headerRangeAddress = new CellRangeAddress(
+                sheetRangeAddress.getFirstRow(), bodyRangeAddress.getFirstRow() - 1,
+                bodyRangeAddress.getFirstColumn(), bodyRangeAddress.getLastColumn());
+    }
+
+    protected void usingDefaultHeader(CellRangeAddress sheetRangeAddress) {
+        // 默认Header：Sheet第一行为默认Header
+        headerRangeAddress = new CellRangeAddress(
+                sheetRangeAddress.getFirstRow(), sheetRangeAddress.getFirstRow(),
+                sheetRangeAddress.getFirstColumn(), sheetRangeAddress.getLastColumn());
+    }
+
+    protected void detectBodyByHeader(CellRangeAddress sheetRangeAddress) {
+        // 根据Header推测Body：Header的下一行到Sheet最后一行为Body
+        bodyRangeAddress = new CellRangeAddress(
+                headerRangeAddress.getLastRow() + 1, sheetRangeAddress.getLastRow(),
+                headerRangeAddress.getFirstColumn(), headerRangeAddress.getLastColumn());
+    }
+
+    protected void detectKeysByHeader() {
+        // 根据Header推测Keys：Header的文本为Key的name和description
+        List<String> headers = getHeaders(headerRangeAddress);
+        keys = new ArrayList<>(headers.size());
+        for (int i = 0; i < headers.size(); i++) {
+            String header = headers.get(i);
+            keys.add(new ColumnKey(header, header, headerRangeAddress.getFirstColumn() + i));
+        }
+    }
+
+    protected boolean isKeysNeedUpdate() {
+        // Keys是否需要更新：如果存在index未确定，则需要更新
+        return keys.stream()
+                .anyMatch(key -> key.getIndex() < 0);
+    }
+
+    protected void updateKeysByHeader() {
+        // 根据Header更新Keys索引
+        List<String> headers = getHeaders(headerRangeAddress);
+        for (ColumnKey key : keys) {
+            if (key.getIndex() < 0) {
+                key.setIndex(matchKey(key, headers));
+            }
+        }
+    }
+
+    protected List<String> getHeaders(CellRangeAddress headerRangeAddress) {
+        // 读取Header的文本
+        return Arrays.asList(excel.getText(headerRangeAddress, headerSeparator, ""));
     }
 }
